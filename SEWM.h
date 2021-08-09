@@ -9,10 +9,8 @@
 #include <X11/keysym.h>
 #include <X11/keysymdef.h>
 
-// made by skippy#6250
 // this is the core of the WM
 
-// headers
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
 
 struct{
@@ -50,13 +48,7 @@ typedef struct{
     unsigned long borderColor;
 } Windows;
 Windows windows[512];
-
-char buffer[28];
-Window *visibleChildren = NULL;
 XWindowAttributes attrs;
-unsigned int visibleCount = 0;
-unsigned int tileCount = 0;
-int tileSide = 0; // right: left, 1: bottom
 
 int launchWM();
 void handleEvents();
@@ -72,19 +64,17 @@ void remFromWins(Window w);
 int getWindowIndex(Window w);
 int howManyFloating();
 
-#include "binds.h" // i put it under the wm structure so it can access it
-// implementations
+#include "binds.h"
 void handleEvents(){
     XNextEvent(wm.dpy, &wm.event);
     XSync(wm.dpy, false);
     switch(wm.event.type){
         case KeyPress:
             printf("KeyPress event called.\n");
-            XLookupString(&wm.event.xkey, buffer, 28, &wm.keysym, NULL);
-            for(int i = 0; i < sizeof(binds) / sizeof(binds[0]); i++){
-                if(wm.keysym == binds[i].key && binds[i].mod == wm.event.xkey.state)
+	          wm.keysym = XKeycodeToKeysym(wm.dpy, (KeyCode)wm.event.xkey.keycode, 0);
+            for(int i = 0; i < sizeof(binds) / sizeof(binds[0]); i++)
+                if(wm.keysym == binds[i].key && (binds[i].mod & ~(LockMask) & (ShiftMask|ControlMask)) == (wm.event.xkey.state & ~(LockMask) & (ShiftMask|ControlMask)))
                   (*binds[i].func)(binds[i].args);
-            }
         break;
         case ButtonPress:
             printf("ButtonPress event called.\n");
@@ -270,8 +260,10 @@ int launchWM(){
     fetchMonitorInfo();
 
 		XUngrabKey(wm.dpy, AnyKey, AnyModifier, DefaultRootWindow(wm.dpy));
+		unsigned int masks[] = {0, LockMask};
     for(int i = 0; i < sizeof(binds) / sizeof(binds[0]); i++)
-      XGrabKey(wm.dpy, XKeysymToKeycode(wm.dpy, binds[i].key), binds[i].mod, DefaultRootWindow(wm.dpy), true, GrabModeAsync, GrabModeAsync);
+      for(int v = 0; v < 2; v++)
+        XGrabKey(wm.dpy, XKeysymToKeycode(wm.dpy, binds[i].key), binds[i].mod|masks[v], DefaultRootWindow(wm.dpy), true, GrabModeAsync, GrabModeAsync);
 
     // move and resize
     XGrabButton(wm.dpy, 1, Mod1Mask, DefaultRootWindow(wm.dpy), true, ButtonPressMask|ButtonReleaseMask|PointerMotionMask, GrabModeAsync, GrabModeAsync, None, None);

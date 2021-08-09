@@ -10,6 +10,9 @@ typedef struct{
     arg args;
 } bind;
 
+#define AltKey   Mod1Mask
+#define ShiftKey ShiftMask
+
 void setupBinds();
 void quitWM();
 void closeProgram();
@@ -22,23 +25,23 @@ void changeWindowOffset(arg args);
 void switchMaster();
 
 bind binds[] = {
-    {Mod1Mask|ControlMask, XK_Return, execApp,               {"st"}               },
-    {Mod1Mask,             XK_e,      execApp,               {"qutebrowser"}      },
-    {Mod1Mask,             XK_d,      execApp,               {"dmenu_run"}        },
-    {Mod1Mask,             XK_s,      execApp,               {"maim -s image.png"}},
-    {Mod1Mask|ControlMask, XK_s,      execApp,               {"sxiv image.png"}   },
-    {Mod1Mask|ControlMask, XK_space,  changeMode,            {.x = 1}             }, // toggle window mode between floating or tiling
-    {Mod1Mask|ControlMask, XK_c,      closeProgram                                },
-    {Mod1Mask|ControlMask, XK_f,      makeFullscreen                              },
-    {Mod1Mask|ControlMask, XK_t,      toggleTilingMode                            }, // turn tiling on/off
-    {Mod1Mask,             XK_Return, switchMaster,                               }, // switch positions between master window and focused window
-    {Mod1Mask,             XK_k,      changeFocus,           {.num = 0}           }, // change window focus
-    {Mod1Mask,             XK_j,      changeFocus,           {.num = 1}           },
-    {Mod1Mask,             XK_h,      changeWindowOffset,    {.num = 0}           }, // change the tiling offset
-    {Mod1Mask,             XK_l,      changeWindowOffset,    {.num = 1}           },
-    {Mod1Mask,             XK_minus,  changeGapSize,         {.num = 0}           }, // change the gap size
-    {Mod1Mask,             XK_equal,  changeGapSize,         {.num = 1}           },
-    {Mod1Mask|ControlMask, XK_q,      quitWM                                      },
+    {AltKey|ShiftKey,    XK_Return, execApp,               {"st"}               },
+    {AltKey,             XK_e,      execApp,               {"qutebrowser"}      },
+    {AltKey,             XK_d,      execApp,               {"dmenu_run"}        },
+    {AltKey,             XK_s,      execApp,               {"maim -s image.png"}},
+    {AltKey|ShiftKey,    XK_s,      execApp,               {"sxiv image.png"}   },
+    {AltKey|ShiftKey,    XK_space,  changeMode,            {.x = 1}             }, // toggle window mode between floating or tiling
+    {AltKey|ShiftKey,    XK_c,      closeProgram                                },
+    {AltKey|ShiftKey,    XK_f,      makeFullscreen                              },
+    {AltKey|ShiftKey,    XK_t,      toggleTilingMode                            }, // turn tiling on/off
+    {AltKey,             XK_Return, switchMaster,                               }, // switch positions between master window and focused window
+    {AltKey,             XK_k,      changeFocus,           {.num = 0}           }, // change window focus
+    {AltKey,             XK_j,      changeFocus,           {.num = 1}           },
+    {AltKey,             XK_h,      changeWindowOffset,    {.num = 0}           }, // change the tiling offset
+    {AltKey,             XK_l,      changeWindowOffset,    {.num = 1}           },
+    {AltKey,             XK_minus,  changeGapSize,         {.num = 0}           }, // change the gap size
+    {AltKey,             XK_equal,  changeGapSize,         {.num = 1}           },
+    {AltKey|ShiftKey,    XK_q,      quitWM                                      },
 };
 
 void execApp(arg args){
