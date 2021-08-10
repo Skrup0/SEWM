@@ -10,15 +10,16 @@
 // then restart X
 
 int main(int argc, char *argv[]){
-    // some settings
-    wm.borderSize = 2;
-    wm.gapSize = 0;
-    wm.tiling = true;
-    wm.border = true;
-    wm.focusedColor = "#0077cc";
-    wm.notFocusedColor = "#aaaaaa";
+  // some settings
+  wm.borderSize = 2;
+  wm.gapSize = 0;
+  wm.tiling = true;
+  wm.border = true;
+  wm.focusedColor = "#0077cc";
+  wm.notFocusedColor = "#aaaaaa";
+  wm.masterCount = 1;
 
-    launchWM();
+  launchWM();
 
-    return 0;
+  return 0;
 }
