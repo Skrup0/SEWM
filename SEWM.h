@@ -35,7 +35,6 @@ typedef struct{
     char *s;
     int num, x, y, w, h;
     Window win;
-    Display *d;
 } arg;
 
 struct{
@@ -47,7 +46,7 @@ typedef struct{
     int isFloating, hasBorder, isFullScreen, isFocused;
     unsigned long borderColor;
 } Windows;
-Windows windows[512];
+Windows *windows;
 XWindowAttributes attrs;
 
 int launchWM();
@@ -214,13 +213,15 @@ int getWindowIndex(Window w){
 }
 
 void addToWins(Window w){
-    //windows = (Windows *)realloc(windows, wm.winCount+10);
+    windows = (Windows *)realloc(windows, sizeof(*windows) * (wm.winCount+1));
+
     windows[wm.winCount].win = w;
     windows[wm.winCount].hasBorder = 1;
     windows[wm.winCount].isFloating = 0;
     windows[wm.winCount].isFullScreen = 0;
 
     wm.winCount++;
+    printf("CURRENT WINDOW COUNT: %d\n", wm.winCount);
     focusWindow(w);
 }
 
@@ -277,7 +278,7 @@ int launchWM(){
     XAllocNamedColor(wm.dpy, map, wm.notFocusedColor, &color, &color);
     wm.nfc = color.pixel;
 
-    //windows = (Windows *)malloc(0);
+    windows = (Windows *)calloc(0, sizeof(*windows));
     wm.borderSize = (wm.border ? wm.borderSize : 0);
     wm.bevent.subwindow = None;
     wm.on = true;

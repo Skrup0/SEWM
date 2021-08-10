@@ -13,7 +13,6 @@ typedef struct{
 #define AltKey   Mod1Mask
 #define ShiftKey ShiftMask
 
-void setupBinds();
 void quitWM();
 void closeProgram();
 void makeFullscreen();
