@@ -66,8 +66,8 @@ struct{
   GC gc;
 
   int x, y, w, h;
-  char *color, *activeColor, *fontColor;
-  unsigned long col, activeCol, fontCol;
+  char *color, *activeColor, *notEmptyColor, *fontColor;
+  unsigned long col, activeCol, notEmptyCol, fontCol;
 } button[9];
 
 XWindowAttributes attrs;
@@ -247,7 +247,13 @@ void changeMode(arg args){
 
 void updateButtons(){
   for(int i = 0; i < 9; i++){
-    XSetForeground(wm.dpy, button[i].gc, i == wm.ad ? button[i].activeCol : button[i].fontCol);
+    if(i == wm.ad){
+      XSetForeground(wm.dpy, button[i].gc, button[i].activeCol);
+    }else if(d[i].wc){
+      XSetForeground(wm.dpy, button[i].gc, button[i].notEmptyCol);
+    }else{
+      XSetForeground(wm.dpy, button[i].gc, button[i].fontCol);
+    }
     XDrawString(wm.dpy, button[i].win, button[i].gc, 6, button[i].y+13, buttonNames[i], 1);
   }
 }
@@ -325,12 +331,17 @@ void createButtons(int w, int h){
   for(int i = 0; i < 9; i++){
     button[i].color = "#1a2026";
     button[i].activeColor = "#0077cc";
+    button[i].notEmptyColor = "#aaaaaa";
     button[i].fontColor = "#FFFFFF";
 
     XAllocNamedColor(wm.dpy, map, button[i].color, &color, &color);
     button[i].col = color.pixel;
     XAllocNamedColor(wm.dpy, map, button[i].activeColor, &color, &color);
     button[i].activeCol = color.pixel;
+    XAllocNamedColor(wm.dpy, map, button[i].notEmptyColor, &color, &color);
+    button[i].notEmptyCol = color.pixel;
+    XAllocNamedColor(wm.dpy, map, button[i].fontColor, &color, &color);
+    button[i].fontCol = color.pixel;
 
     button[i].x = i*w;
     button[i].y = 0;
@@ -347,9 +358,7 @@ void createButtons(int w, int h){
     XSelectInput(wm.dpy, button[i].win, ExposureMask);
 
     button[i].gc = XCreateGC(wm.dpy, button[i].win, 0, 0);
-    XAllocNamedColor(wm.dpy, map, button[i].fontColor, &color, &color);
-    button[i].fontCol = color.pixel;
-    XSetForeground(wm.dpy, button[i].gc, color.pixel);
+    XSetForeground(wm.dpy, button[i].gc, button[i].fontCol);
     XSetBackground(wm.dpy, button[i].gc, button[i].col);
   }
 }
