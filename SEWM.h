@@ -12,6 +12,7 @@
 // this is the core of the WM
 
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
+#define SIZEOF(a) (sizeof(a) / sizeof(a[0]))
 
 struct{
   Display *dpy;
@@ -102,12 +103,19 @@ void handleEvents(){
     case KeyPress:
       printf("KeyPress event called.\n");
       wm.keysym = XKeycodeToKeysym(wm.dpy, (KeyCode)wm.event.xkey.keycode, 0);
-      for(int i = 0; i < sizeof(binds) / sizeof(binds[0]); i++)
+      for(int i = 0; i < SIZEOF(binds); i++)
         if(wm.keysym == binds[i].key && (binds[i].mod & ~(LockMask) & (ShiftMask|ControlMask)) == (wm.event.xkey.state & ~(LockMask) & (ShiftMask|ControlMask)))
           (*binds[i].func)(binds[i].args);
       break;
     case ButtonPress:
       printf("ButtonPress event called.\n");
+      for(int i = 0; i < SIZEOF(button); i++){
+        if(button[i].win == wm.event.xbutton.window){
+          changeDesktop((arg){.num = i});
+          break;
+        }
+      }
+
       if(wm.event.xkey.subwindow && wm.event.xkey.subwindow != bar.win){
         XGetWindowAttributes(wm.dpy, wm.event.xkey.subwindow, &wm.attrs);
         wm.bevent = wm.event.xbutton;
@@ -246,7 +254,7 @@ void changeMode(arg args){
 }
 
 void updateButtons(){
-  for(int i = 0; i < 9; i++){
+  for(int i = 0; i < SIZEOF(button); i++){
     if(i == wm.ad){
       XSetForeground(wm.dpy, button[i].gc, button[i].activeCol);
     }else if(d[i].wc){
@@ -289,7 +297,7 @@ void remFromWins(Window w){
   if(wm.focused == w)
     wm.focused = None;
 
-  for(int i = 0; i < 9; i++)
+  for(int i = 0; i < SIZEOF(d); i++)
     for(int j = 0; j < d[i].wc; j++)
       if(d[i].w[j].win == w)
         removeFromArray(j, i);
@@ -328,10 +336,10 @@ void createButtons(int w, int h){
   XColor color;
   Colormap map = DefaultColormap(wm.dpy, DefaultScreen(wm.dpy));
 
-  for(int i = 0; i < 9; i++){
+  for(int i = 0; i < SIZEOF(button); i++){
     button[i].color = "#1a2026";
     button[i].activeColor = "#0077cc";
-    button[i].notEmptyColor = "#aaaaaa";
+    button[i].notEmptyColor = "#888888";
     button[i].fontColor = "#FFFFFF";
 
     XAllocNamedColor(wm.dpy, map, button[i].color, &color, &color);
@@ -355,7 +363,7 @@ void createButtons(int w, int h){
 
     XMapWindow(wm.dpy, button[i].win);
     XRaiseWindow(wm.dpy, button[i].win);
-    XSelectInput(wm.dpy, button[i].win, ExposureMask);
+    XSelectInput(wm.dpy, button[i].win, ExposureMask|ButtonPressMask);
 
     button[i].gc = XCreateGC(wm.dpy, button[i].win, 0, 0);
     XSetForeground(wm.dpy, button[i].gc, button[i].fontCol);
@@ -394,7 +402,7 @@ int launchWM(){
 
   XSelectInput(wm.dpy, DefaultRootWindow(wm.dpy), SubstructureNotifyMask);
 
-  for(int i = 0; i < 9; i++)
+  for(int i = 0; i < SIZEOF(d); i++)
     d[i].mc = wm.mc;
   d[wm.ad].w = (Windows *)calloc(0, sizeof(*d[wm.ad].w));
 
