@@ -3,6 +3,7 @@
 // so that you don't have to edit the source everytime
 // you want to edit something.
 
+#include <X11/Xlib.h>
 typedef struct{
   unsigned int mod;
   KeySym key;
@@ -24,6 +25,9 @@ void changeWindowOffset(arg args);
 void switchMaster();
 void changeMasterCount(arg args);
 
+void changeWindowMap(arg args);
+void changeDesktop(arg args);
+
 bind binds[] = {
   {AltKey|ShiftKey,    XK_Return, execApp,               {"st"}               },
   {AltKey,             XK_e,      execApp,               {"qutebrowser"}      },
@@ -41,8 +45,19 @@ bind binds[] = {
   {AltKey,             XK_l,      changeWindowOffset,    {.num = 1}           },
   {AltKey,             XK_minus,  changeGapSize,         {.num = 0}           }, // change the gap size
   {AltKey,             XK_equal,  changeGapSize,         {.num = 1}           },
-  {AltKey,             XK_i,      changeMasterCount,     {.num = 0}           }, // change the master window count
-  {AltKey,             XK_d,      changeMasterCount,     {.num = 1}           },
+  {AltKey,             XK_d,      changeMasterCount,     {.num = 0}           }, // change the master window count
+  {AltKey,             XK_i,      changeMasterCount,     {.num = 1}           },
+
+  {AltKey,             XK_1,      changeDesktop,         {.num = 0}           },
+  {AltKey,             XK_2,      changeDesktop,         {.num = 1}           },
+  {AltKey,             XK_3,      changeDesktop,         {.num = 2}           },
+  {AltKey,             XK_4,      changeDesktop,         {.num = 3}           },
+  {AltKey,             XK_5,      changeDesktop,         {.num = 4}           },
+  {AltKey,             XK_6,      changeDesktop,         {.num = 5}           },
+  {AltKey,             XK_7,      changeDesktop,         {.num = 6}           },
+  {AltKey,             XK_8,      changeDesktop,         {.num = 7}           },
+  {AltKey,             XK_9,      changeDesktop,         {.num = 8}           },
+
   {AltKey|ShiftKey,    XK_q,      quitWM                                      },
 };
 
@@ -77,10 +92,10 @@ void changeFocus(arg args){
     return;
   switch(args.num){
     case 0: // left
-      focusWindow(i == 0 ? windows[wm.winCount-1].win : windows[i-1].win);
+      focusWindow(i == 0 ? d[wm.ad].w[d[wm.ad].wc-1].win : d[wm.ad].w[i-1].win);
       break;
     case 1: // right
-      focusWindow(i == wm.winCount-1 ? windows[0].win : windows[i+1].win);
+      focusWindow(i == d[wm.ad].wc-1 ? d[wm.ad].w[0].win : d[wm.ad].w[i+1].win);
       break;
   }
 }
@@ -88,29 +103,73 @@ void changeFocus(arg args){
 void changeWindowOffset(arg args){
   switch(args.num){
     case 0: // left
-      wm.windowOffset = wm.windowOffset - 25;
-      tileWindows();
+      if(wm.windowOffset >= (-monitorInfo.width/2)+150){
+        wm.windowOffset = wm.windowOffset - 50;
+        tileWindows();
+      }
       break;
     case 1: // right
-      wm.windowOffset = wm.windowOffset + 25;
-      tileWindows();
+      if(wm.windowOffset <= (monitorInfo.width/2)-150){
+        wm.windowOffset = wm.windowOffset + 50;
+        tileWindows();
+      }
       break;
   }
 }
 
+void changeWindowMap(arg args){
+  XWindowAttributes winAttrs;
+
+  XGrabServer(wm.dpy);
+  XGetWindowAttributes(wm.dpy, DefaultRootWindow(wm.dpy), &attrs);
+  XGetWindowAttributes(wm.dpy, args.win, &winAttrs);
+
+  XSelectInput(wm.dpy, DefaultRootWindow(wm.dpy), attrs.your_event_mask & ~SubstructureNotifyMask);
+  XSelectInput(wm.dpy, args.win, winAttrs.your_event_mask & ~StructureNotifyMask);
+  if(args.num){
+    XUnmapWindow(wm.dpy, args.win);
+  }else{
+    XMapWindow(wm.dpy, args.win);
+  }
+  XSelectInput(wm.dpy, DefaultRootWindow(wm.dpy), attrs.your_event_mask);
+  XSelectInput(wm.dpy, args.win, winAttrs.your_event_mask);
+  XUngrabServer(wm.dpy);
+}
+
+void changeDesktop(arg args){
+  if(args.num == wm.ad)
+    return;
+
+  // unfocus the prev focused desktop
+  for(int i = 0; i < d[wm.ad].wc; i++){
+    changeWindowMap((arg){.win = d[wm.ad].w[i].win, .num = 1});
+  }
+
+  // focus the new one
+  wm.ad = args.num;
+  for(int i = 0; i < d[args.num].wc; i++){
+    changeWindowMap((arg){.win = d[args.num].w[i].win, .num = 0});
+  }
+
+  updateButtons();
+  // focus the window in master
+  if(d[args.num].wc)
+    focusWindow(d[args.num].w[d[args.num].wc-1].win);
+}
+
 void changeMasterCount(arg args){
-  if(!wm.winCount)
+  if(!d[wm.ad].wc)
     return;
   switch(args.num){
     case 0:
-      if(wm.masterCount < wm.tiliedCount){
-        wm.masterCount++;
+      if(d[wm.ad].mc < d[wm.ad].tc){
+        d[wm.ad].mc++;
         tileWindows();
       }
       break;
     case 1:
-      if(wm.masterCount > 0){
-        wm.masterCount--;
+      if(d[wm.ad].mc > 0){
+        d[wm.ad].mc--;
         tileWindows();
       }
       break;
@@ -119,14 +178,14 @@ void changeMasterCount(arg args){
 
 void switchMaster(){
   int i = getWindowIndex(wm.focused);
-  if(i==-1 || !wm.winCount)
+  if(i==-1 || !d[wm.ad].wc)
     return;
 
   Windows w;
-  w = windows[wm.winCount-1];
+  w = d[wm.ad].w[d[wm.ad].wc-1];
 
-  windows[wm.winCount-1] = windows[i];
-  windows[i] = w;
+  d[wm.ad].w[d[wm.ad].wc-1] = d[wm.ad].w[i];
+  d[wm.ad].w[i] = w;
   tileWindows();
 }
 
@@ -152,7 +211,7 @@ void makeFullscreen(){
     XChangeProperty(wm.dpy, wm.focused, XInternAtom(wm.dpy, "_NET_WM_STATE", false), XA_ATOM, 32, PropModeReplace, (unsigned char*)atoms, 1);
     XMoveResizeWindow(wm.dpy, wm.focused, -wm.borderSize, -wm.borderSize, monitorInfo.width+wm.borderSize, monitorInfo.height+wm.borderSize);
 
-    windows[i].isFocused = 1;
+    d[wm.ad].w[i].isFocused = 1;
   }
 }
 

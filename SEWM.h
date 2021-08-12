@@ -23,9 +23,9 @@ struct{
 
   int dx, dy; // mouse delta value
   int gapSize, borderSize, windowOffset;
-  int winCount, floatingCount, tiliedCount, masterCount;
+  int wc, fc, tc, mc, ad;
   char *focusedColor, *notFocusedColor;
-  unsigned long fc, nfc;
+  unsigned long fcol, nfcol;
   bool on;
   bool tiling;
   bool border;
@@ -46,8 +46,32 @@ typedef struct{
   int isFloating, hasBorder, isFullScreen, isFocused;
   unsigned long borderColor;
 } Windows;
-Windows *windows;
+
+struct{
+  Windows *w;
+  int wc, fc, tc, mc;
+} d[9];
+
+struct{
+  Window win;
+  GC gc;
+
+  int x, y, w, h, borderSize;
+  char *color, *borderColor;
+  unsigned long col, borderCol;
+} bar;
+
+struct{
+  Window win;
+  GC gc;
+
+  int x, y, w, h;
+  char *color, *activeColor, *fontColor;
+  unsigned long col, activeCol, fontCol;
+} button[9];
+
 XWindowAttributes attrs;
+const char *buttonNames[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9"};
 
 int launchWM();
 void handleEvents();
@@ -59,6 +83,10 @@ void changeMode(arg args);
 void manageWindow(Window w);
 void addToWins(Window w);
 void remFromWins(Window w);
+void removeFromArray(int pos, int ind);
+void drawBar();
+void createButtons(int w, int h);
+void updateButtons();
 
 int getWindowIndex(Window w);
 int howManyFloating();
@@ -68,6 +96,9 @@ void handleEvents(){
   XNextEvent(wm.dpy, &wm.event);
   XSync(wm.dpy, false);
   switch(wm.event.type){
+    case Expose:
+      updateButtons();
+      break;
     case KeyPress:
       printf("KeyPress event called.\n");
       wm.keysym = XKeycodeToKeysym(wm.dpy, (KeyCode)wm.event.xkey.keycode, 0);
@@ -77,10 +108,9 @@ void handleEvents(){
       break;
     case ButtonPress:
       printf("ButtonPress event called.\n");
-      if(wm.event.xkey.subwindow){
+      if(wm.event.xkey.subwindow && wm.event.xkey.subwindow != bar.win){
         XGetWindowAttributes(wm.dpy, wm.event.xkey.subwindow, &wm.attrs);
         wm.bevent = wm.event.xbutton;
-        //focusWindow(wm.event.xkey.subwindow); // already focused
         XRaiseWindow(wm.dpy, wm.event.xkey.subwindow);
       }
       break;
@@ -104,21 +134,24 @@ void handleEvents(){
       break;
     case MapNotify:
       printf("mapNotify event called.\n");
+      if(wm.event.xmap.window == bar.win)
+        break;
+
       XGetWindowAttributes(wm.dpy, wm.event.xmap.window, &attrs);
       if(attrs.class != InputOnly && attrs.map_state == 2 && attrs.override_redirect == false){
         addToWins(wm.event.xmap.window);
         manageWindow(wm.event.xmap.window);
         tileWindows();
-        if(wm.winCount)
-          focusWindow(windows[wm.winCount-1].win);
+        if(d[wm.ad].wc)
+          focusWindow(d[wm.ad].w[d[wm.ad].wc-1].win);
       }
       break;
     case UnmapNotify:
       printf("UnmapNotify event called.\n");
       remFromWins(wm.event.xunmap.window);
       tileWindows();
-      if(wm.winCount)
-        focusWindow(windows[wm.winCount-1].win);
+      if(d[wm.ad].wc)
+        focusWindow(d[wm.ad].w[d[wm.ad].wc-1].win);
       break;
     default:
       printf("Unknown/Ignored event called, (%d)\n", wm.event.type);
@@ -129,32 +162,32 @@ void handleEvents(){
 void tileWindows(){
   if(!wm.tiling)
     return;
-  wm.floatingCount = howManyFloating();
-  wm.tiliedCount = wm.winCount - wm.floatingCount;
-  int c=wm.tiliedCount, h=0, g=wm.gapSize+wm.borderSize, ii=0;
-  for(int i = 0; i < wm.winCount; i++){
-    if(!windows[i].isFloating && !windows[i].isFullScreen){
+  d[wm.ad].fc = howManyFloating();
+  d[wm.ad].tc = d[wm.ad].wc - d[wm.ad].fc;
+  int c=d[wm.ad].tc, h=0, g=wm.gapSize+wm.borderSize, ii=0;
+  for(int i = 0; i < d[wm.ad].wc; i++){
+    if(!d[wm.ad].w[i].isFloating && !d[wm.ad].w[i].isFullScreen){
       if(ii == c || !c)
         break;
 
       if(c == 1){
-        XMoveResizeWindow(wm.dpy, windows[i].win, wm.gapSize, wm.gapSize, monitorInfo.width-g*2, monitorInfo.height-g*2);
+        XMoveResizeWindow(wm.dpy, d[wm.ad].w[i].win, wm.gapSize, wm.gapSize+bar.h, monitorInfo.width-g*2, (monitorInfo.height-g*2)-bar.h);
         break;
       }
 
-      if(ii+wm.masterCount < c){
-        h = monitorInfo.height / (c - wm.masterCount);
-        XMoveResizeWindow(wm.dpy, windows[i].win, 
-            ((wm.masterCount ? monitorInfo.width/2 : 0)+wm.gapSize)+wm.windowOffset*(wm.masterCount ? 1 : 0), 
-            (h*((wm.winCount-(wm.masterCount+1))-(ii+++wm.floatingCount)))+wm.gapSize, 
-            ((monitorInfo.width/(wm.masterCount ? 2 : 1))-g*2)-wm.windowOffset*(wm.masterCount ? 1 : 0), 
-            h-g*2);
+      if(ii+d[wm.ad].mc < c){
+        h = monitorInfo.height / (c - d[wm.ad].mc);
+        XMoveResizeWindow(wm.dpy, d[wm.ad].w[i].win, 
+            ((d[wm.ad].mc ? monitorInfo.width/2 : 0)+wm.gapSize)+wm.windowOffset*(d[wm.ad].mc ? 1 : 0), 
+            (h*((d[wm.ad].wc-(d[wm.ad].mc+1))-(ii+++d[wm.ad].fc)))+wm.gapSize+bar.h, 
+            ((monitorInfo.width/(d[wm.ad].mc ? 2 : 1))-g*2)-wm.windowOffset*(d[wm.ad].mc ? 1 : 0), 
+            (h-g*2)-bar.h);
       }else{
-        XMoveResizeWindow(wm.dpy, windows[i].win, 
+        XMoveResizeWindow(wm.dpy, d[wm.ad].w[i].win, 
             wm.gapSize, 
-            ((c-++ii)*monitorInfo.height/wm.masterCount)+wm.gapSize, 
-            ((monitorInfo.width/(wm.masterCount==c ? 1 : 2))-g*2)+wm.windowOffset*(wm.masterCount==c ? 0 : 1), 
-            (monitorInfo.height/wm.masterCount)-g*2);
+            ((c-++ii)*monitorInfo.height/d[wm.ad].mc)+wm.gapSize+bar.h, 
+            ((monitorInfo.width/(d[wm.ad].mc==c ? 1 : 2))-g*2)+wm.windowOffset*(d[wm.ad].mc==c ? 0 : 1), 
+            ((monitorInfo.height/d[wm.ad].mc)-g*2)-bar.h);
       }
     }
   }
@@ -169,8 +202,8 @@ void manageWindow(Window w){
 
 int howManyFloating(){
   int result=0;
-  for(int i = 0; i < wm.winCount; i++){
-    if(windows[i].isFloating)
+  for(int i = 0; i < d[wm.ad].wc; i++){
+    if(d[wm.ad].w[i].isFloating)
       result++;
   }
   return result;
@@ -183,15 +216,15 @@ void focusWindow(Window w){
 
   // unfocuse prev one
   if(ii!=-1){
-    windows[ii].isFocused = 0;
-    windows[ii].borderColor = wm.nfc;
-    XSetWindowBorder(wm.dpy, windows[ii].win, windows[ii].borderColor);
+    d[wm.ad].w[ii].isFocused = 0;
+    d[wm.ad].w[ii].borderColor = wm.nfcol;
+    XSetWindowBorder(wm.dpy, d[wm.ad].w[ii].win, d[wm.ad].w[ii].borderColor);
   }
 
   wm.focused = w;
-  windows[i].isFocused = 1;
-  windows[i].borderColor = wm.fc;
-  XSetWindowBorder(wm.dpy, w, windows[i].borderColor);
+  d[wm.ad].w[i].isFocused = 1;
+  d[wm.ad].w[i].borderColor = wm.fcol;
+  XSetWindowBorder(wm.dpy, w, d[wm.ad].w[i].borderColor);
   XSetInputFocus(wm.dpy, w, RevertToPointerRoot, CurrentTime);
 }
 
@@ -201,50 +234,123 @@ void changeMode(arg args){
   if(args.x){
     int ii = getWindowIndex(wm.focused);
     if(ii==-1){return;}
-    windows[ii].isFloating = !windows[ii].isFloating;
+    d[wm.ad].w[ii].isFloating = !d[wm.ad].w[ii].isFloating;
     tileWindows();
     XRaiseWindow(wm.dpy, wm.focused);
     return;
   }
   if(i!=-1){
-    windows[i].isFloating = args.num;
+    d[wm.ad].w[i].isFloating = args.num;
     tileWindows();
   }
 }
 
+void updateButtons(){
+  for(int i = 0; i < 9; i++){
+    XSetForeground(wm.dpy, button[i].gc, i == wm.ad ? button[i].activeCol : button[i].fontCol);
+    XDrawString(wm.dpy, button[i].win, button[i].gc, 6, button[i].y+13, buttonNames[i], 1);
+  }
+}
+
 int getWindowIndex(Window w){
-  for(int i = 0; i < wm.winCount; i++){
-    if(windows[i].win == w)
+  for(int i = 0; i < d[wm.ad].wc; i++){
+    if(d[wm.ad].w[i].win == w)
       return i;
   }
   return -1;
 }
 
 void addToWins(Window w){
-  windows = (Windows *)realloc(windows, sizeof(*windows) * (wm.winCount+1));
+  d[wm.ad].w = (Windows *)realloc(d[wm.ad].w, sizeof(*d[wm.ad].w) * (d[wm.ad].wc+1));
 
-  windows[wm.winCount].win = w;
-  windows[wm.winCount].hasBorder = 1;
-  windows[wm.winCount].isFloating = 0;
-  windows[wm.winCount].isFullScreen = 0;
+  d[wm.ad].w[d[wm.ad].wc].win = w;
+  d[wm.ad].w[d[wm.ad].wc].hasBorder = 1;
+  d[wm.ad].w[d[wm.ad].wc].isFloating = 0;
+  d[wm.ad].w[d[wm.ad].wc].isFullScreen = 0;
 
-  wm.winCount++;
+  d[wm.ad].wc++;
   focusWindow(w);
 }
 
-void removeFromArray(int pos){
-  for(int i = pos; i < wm.winCount; i++){
-    windows[i] = windows[i+1];
+void removeFromArray(int pos, int ind){
+  for(int i = pos; i < d[ind].wc; i++){
+    d[ind].w[i] = d[ind].w[i+1];
   }
-  wm.winCount--;
+  d[ind].wc--;
 }
 
 void remFromWins(Window w){
   if(wm.focused == w)
     wm.focused = None;
-  int i = getWindowIndex(w);
-  if(i!=-1){
-    removeFromArray(i);
+
+  for(int i = 0; i < 9; i++)
+    for(int j = 0; j < d[i].wc; j++)
+      if(d[i].w[j].win == w)
+        removeFromArray(j, i);
+}
+
+void drawBar(){
+  XColor color;
+  Colormap map = DefaultColormap(wm.dpy, DefaultScreen(wm.dpy));
+
+  XAllocNamedColor(wm.dpy, map, bar.color, &color, &color);
+  bar.col = color.pixel;
+  XAllocNamedColor(wm.dpy, map, bar.borderColor, &color, &color);
+  bar.borderCol = color.pixel;
+
+  bar.win = XCreateSimpleWindow(wm.dpy, DefaultRootWindow(wm.dpy),
+      bar.x, bar.y, bar.w-(bar.borderSize*2), bar.h, bar.borderSize,
+      bar.borderCol, bar.col
+      );
+
+  XMapWindow(wm.dpy, bar.win);
+  XRaiseWindow(wm.dpy, bar.win);
+  XSetClassHint(wm.dpy, bar.win, &(XClassHint){"sewm", "sewm"});
+  //XSelectInput(wm.dpy, bar.win, ExposureMask);
+
+  XChangeProperty(wm.dpy, bar.win, XInternAtom(wm.dpy, "_NET_SUPPORTING_WM_CHECK", False), XA_WINDOW, 32, PropModeReplace, (unsigned char *)&bar.win, 1);
+  XChangeProperty(wm.dpy, bar.win, XInternAtom(wm.dpy, "_NET_WM_NAME", False), XInternAtom(wm.dpy, "UTF8_STRING", False), 8, PropModeReplace, (unsigned char *)"sewm", 4);
+  XChangeProperty(wm.dpy, DefaultRootWindow(wm.dpy), XInternAtom(wm.dpy, "_NET_SUPPORTING_WM_CHECK", False), XA_WINDOW, 32, PropModeReplace, (unsigned char *)&bar.win, 1);
+
+  bar.gc = XCreateGC(wm.dpy, bar.win, 0, 0);
+  XAllocNamedColor(wm.dpy, map, "#FFFFFF", &color, &color);
+  XSetForeground(wm.dpy, bar.gc, color.pixel);
+  XSetBackground(wm.dpy, bar.gc, bar.col);
+}
+
+void createButtons(int w, int h){
+  XColor color;
+  Colormap map = DefaultColormap(wm.dpy, DefaultScreen(wm.dpy));
+
+  for(int i = 0; i < 9; i++){
+    button[i].color = "#1a2026";
+    button[i].activeColor = "#0077cc";
+    button[i].fontColor = "#FFFFFF";
+
+    XAllocNamedColor(wm.dpy, map, button[i].color, &color, &color);
+    button[i].col = color.pixel;
+    XAllocNamedColor(wm.dpy, map, button[i].activeColor, &color, &color);
+    button[i].activeCol = color.pixel;
+
+    button[i].x = i*w;
+    button[i].y = 0;
+    button[i].w = w;
+    button[i].h = h;
+
+    button[i].win = XCreateSimpleWindow(wm.dpy, bar.win,
+        button[i].x, button[i].y, button[i].w, button[i].h, 0,
+        button[i].col, button[i].col
+        );
+
+    XMapWindow(wm.dpy, button[i].win);
+    XRaiseWindow(wm.dpy, button[i].win);
+    XSelectInput(wm.dpy, button[i].win, ExposureMask);
+
+    button[i].gc = XCreateGC(wm.dpy, button[i].win, 0, 0);
+    XAllocNamedColor(wm.dpy, map, button[i].fontColor, &color, &color);
+    button[i].fontCol = color.pixel;
+    XSetForeground(wm.dpy, button[i].gc, color.pixel);
+    XSetBackground(wm.dpy, button[i].gc, button[i].col);
   }
 }
 
@@ -279,19 +385,33 @@ int launchWM(){
 
   XSelectInput(wm.dpy, DefaultRootWindow(wm.dpy), SubstructureNotifyMask);
 
+  for(int i = 0; i < 9; i++)
+    d[i].mc = wm.mc;
+  d[wm.ad].w = (Windows *)calloc(0, sizeof(*d[wm.ad].w));
+
+  bar.x = 0;
+  bar.y = 0;
+  bar.w = monitorInfo.width;
+  bar.h = 18;
+  bar.borderSize = 0;
+  bar.color = "#1a2026";
+  bar.borderColor = "#0077cc";
+
+  drawBar();
+  createButtons(18, bar.h);
+
   map = DefaultColormap(wm.dpy, DefaultScreen(wm.dpy));
   XAllocNamedColor(wm.dpy, map, wm.focusedColor, &color, &color);
-  wm.fc = color.pixel;
+  wm.fcol = color.pixel;
   XAllocNamedColor(wm.dpy, map, wm.notFocusedColor, &color, &color);
-  wm.nfc = color.pixel;
+  wm.nfcol = color.pixel;
 
-  windows = (Windows *)calloc(0, sizeof(*windows));
   wm.borderSize = (wm.border ? wm.borderSize : 0);
   wm.bevent.subwindow = None;
   wm.on = true;
-  while(wm.on){
+
+  while(wm.on)
     handleEvents();
-  }
 
   return 1;
 }

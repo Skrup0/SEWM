@@ -1,4 +1,5 @@
 #include "SEWM.h"
+#include <X11/Xlib.h>
 
 // SEWM (skippy's epic window manager)
 // made by Skippy#6250
@@ -12,14 +13,15 @@
 int main(int argc, char *argv[]){
   // some settings
   wm.borderSize = 2;
-  wm.gapSize = 0;
+  wm.gapSize = 16;
   wm.tiling = true;
   wm.border = true;
   wm.focusedColor = "#0077cc";
   wm.notFocusedColor = "#aaaaaa";
-  wm.masterCount = 1;
+  wm.mc = 1; // master count
 
   launchWM();
 
+  XFree(d);
   return 0;
 }
