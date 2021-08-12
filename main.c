@@ -18,7 +18,6 @@ int main(int argc, char *argv[]){
   wm.border = true;
   wm.focusedColor = "#0077cc";
   wm.notFocusedColor = "#aaaaaa";
-  wm.mc = 1; // master count
 
   launchWM();
 

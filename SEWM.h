@@ -184,18 +184,18 @@ void tileWindows(){
       }
 
       if(ii+d[wm.ad].mc < c){
-        h = monitorInfo.height / (c - d[wm.ad].mc);
+        h = (monitorInfo.height-(bar.h+g)) / (c - d[wm.ad].mc);
         XMoveResizeWindow(wm.dpy, d[wm.ad].w[i].win, 
-            ((d[wm.ad].mc ? monitorInfo.width/2 : 0)+wm.gapSize)+wm.windowOffset*(d[wm.ad].mc ? 1 : 0), 
+            ((d[wm.ad].mc?monitorInfo.width/2:0)+wm.gapSize)+wm.windowOffset*(d[wm.ad].mc?1:0), 
             (h*((d[wm.ad].wc-(d[wm.ad].mc+1))-(ii+++d[wm.ad].fc)))+wm.gapSize+bar.h, 
-            ((monitorInfo.width/(d[wm.ad].mc ? 2 : 1))-g*2)-wm.windowOffset*(d[wm.ad].mc ? 1 : 0), 
-            (h-g*2)-bar.h);
+            ((monitorInfo.width/(d[wm.ad].mc?2:1))-g*2)-wm.windowOffset*(d[wm.ad].mc?1:0), 
+            h-g);
       }else{
         XMoveResizeWindow(wm.dpy, d[wm.ad].w[i].win, 
             wm.gapSize, 
-            ((c-++ii)*monitorInfo.height/d[wm.ad].mc)+wm.gapSize+bar.h, 
-            ((monitorInfo.width/(d[wm.ad].mc==c ? 1 : 2))-g*2)+wm.windowOffset*(d[wm.ad].mc==c ? 0 : 1), 
-            ((monitorInfo.height/d[wm.ad].mc)-g*2)-bar.h);
+            ((c-++ii)*(monitorInfo.height-(bar.h+wm.gapSize))/d[wm.ad].mc)+wm.gapSize+bar.h, 
+            ((monitorInfo.width/(d[wm.ad].mc==c?1:2))-g*(d[wm.ad].mc==c?2:1))+wm.windowOffset*(d[wm.ad].mc==c?0:1), 
+            ((monitorInfo.height-(bar.h+g))/d[wm.ad].mc)-g);
       }
     }
   }
@@ -287,6 +287,8 @@ void addToWins(Window w){
 }
 
 void removeFromArray(int pos, int ind){
+  if(d[ind].mc > d[ind].wc-1)
+    d[ind].mc--;
   for(int i = pos; i < d[ind].wc; i++){
     d[ind].w[i] = d[ind].w[i+1];
   }
@@ -402,6 +404,7 @@ int launchWM(){
 
   XSelectInput(wm.dpy, DefaultRootWindow(wm.dpy), SubstructureNotifyMask);
 
+  wm.mc = 1; // master count
   for(int i = 0; i < SIZEOF(d); i++)
     d[i].mc = wm.mc;
   d[wm.ad].w = (Windows *)calloc(0, sizeof(*d[wm.ad].w));
