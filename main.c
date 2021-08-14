@@ -16,8 +16,6 @@ int main(int argc, char *argv[]){
   wm.gapSize = 16;
   wm.tiling = true;
   wm.border = true;
-  wm.focusedColor = "#0077cc";
-  wm.notFocusedColor = "#aaaaaa";
 
   launchWM();
 

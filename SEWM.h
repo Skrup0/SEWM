@@ -1,10 +1,13 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
+#include <stdint.h>
 
 #include <X11/X.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <X11/Xft/Xft.h>
 #include <X11/Xatom.h>
 #include <X11/keysym.h>
 #include <X11/keysymdef.h>
@@ -21,12 +24,11 @@ struct{
   XEvent event;
   KeySym keysym;
   Window focused; // current focused window
+  XftFont **fonts;
 
   int dx, dy; // mouse delta value
   int gapSize, borderSize, windowOffset;
   int wc, fc, tc, mc, ad;
-  char *focusedColor, *notFocusedColor;
-  unsigned long fcol, nfcol;
   bool on;
   bool tiling;
   bool border;
@@ -45,7 +47,6 @@ struct{
 typedef struct{
   Window win;
   int isFloating, hasBorder, isFullScreen, isFocused;
-  unsigned long borderColor;
 } Windows;
 
 struct{
@@ -58,8 +59,6 @@ struct{
   GC gc;
 
   int x, y, w, h, borderSize;
-  char *color, *borderColor;
-  unsigned long col, borderCol;
 } bar;
 
 struct{
@@ -67,12 +66,18 @@ struct{
   GC gc;
 
   int x, y, w, h;
-  char *color, *activeColor, *notEmptyColor, *fontColor;
-  unsigned long col, activeCol, notEmptyCol, fontCol;
+  arg args;
+  void (*func)();
 } button[9];
-
 XWindowAttributes attrs;
-const char *buttonNames[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9"};
+
+const char *buttonNames[] = {"", "", "", "", "", "", "", "", ""};
+const char *fontNames[] = {"monospace:size=14", "fontawesome:size=14"};
+
+const char *colors[]     = {"#1a2026", "#0077cc", "#888888"};
+const char *fontColors[] = {"#FFFFFF", "#0077cc", "#888888"};
+unsigned long *xColors;
+XftColor *xFontColors;
 
 int launchWM();
 void handleEvents();
@@ -88,6 +93,11 @@ void removeFromArray(int pos, int ind);
 void drawBar();
 void createButtons(int w, int h);
 void updateButtons();
+int decode_code_point(char **s);
+
+void loadColors();
+void loadFonts();
+void drawText(char *string, XftColor xcolor, Window win, int x, int y, int clear);
 
 int getWindowIndex(Window w);
 int howManyFloating();
@@ -98,6 +108,7 @@ void handleEvents(){
   XSync(wm.dpy, false);
   switch(wm.event.type){
     case Expose:
+      XClearWindow(wm.dpy, bar.win);
       updateButtons();
       break;
     case KeyPress:
@@ -111,7 +122,7 @@ void handleEvents(){
       printf("ButtonPress event called.\n");
       for(int i = 0; i < SIZEOF(button); i++){
         if(button[i].win == wm.event.xbutton.window){
-          changeDesktop((arg){.num = i});
+          (*button[i].func)(button[i].args);
           break;
         }
       }
@@ -172,7 +183,9 @@ void tileWindows(){
     return;
   d[wm.ad].fc = howManyFloating();
   d[wm.ad].tc = d[wm.ad].wc - d[wm.ad].fc;
-  int c=d[wm.ad].tc, h=0, g=wm.gapSize+wm.borderSize, ii=0;
+  int c=d[wm.ad].tc, h=0, g=wm.gapSize+wm.borderSize, ii=0, amc=d[wm.ad].mc;
+  if(d[wm.ad].mc > d[wm.ad].wc-1 && d[wm.ad].wc-1 > 0)
+    amc = d[wm.ad].mc - (d[wm.ad].mc - d[wm.ad].wc);
   for(int i = 0; i < d[wm.ad].wc; i++){
     if(!d[wm.ad].w[i].isFloating && !d[wm.ad].w[i].isFullScreen){
       if(ii == c || !c)
@@ -183,19 +196,20 @@ void tileWindows(){
         break;
       }
 
-      if(ii+d[wm.ad].mc < c){
-        h = (monitorInfo.height-(bar.h+g)) / (c - d[wm.ad].mc);
+      if(ii+amc < c){
+        h = (monitorInfo.height-(bar.h+g)) / (c - amc);
         XMoveResizeWindow(wm.dpy, d[wm.ad].w[i].win, 
-            ((d[wm.ad].mc?monitorInfo.width/2:0)+wm.gapSize)+wm.windowOffset*(d[wm.ad].mc?1:0), 
-            (h*((d[wm.ad].wc-(d[wm.ad].mc+1))-(ii+++d[wm.ad].fc)))+wm.gapSize+bar.h, 
-            ((monitorInfo.width/(d[wm.ad].mc?2:1))-g*2)-wm.windowOffset*(d[wm.ad].mc?1:0), 
-            h-g);
+            ((amc?monitorInfo.width/2:0)+wm.gapSize)+wm.windowOffset*(amc?1:0), 
+            (h*((d[wm.ad].wc-(amc+1))-(ii+++d[wm.ad].fc)))+wm.gapSize+bar.h, 
+            ((monitorInfo.width/(amc?2:1))-g*2)-wm.windowOffset*(amc?1:0), 
+            h-(g+(wm.borderSize)*(ii?1:0)));
       }else{
+        h = amc==c?0:1;
         XMoveResizeWindow(wm.dpy, d[wm.ad].w[i].win, 
             wm.gapSize, 
-            ((c-++ii)*(monitorInfo.height-(bar.h+wm.gapSize))/d[wm.ad].mc)+wm.gapSize+bar.h, 
-            ((monitorInfo.width/(d[wm.ad].mc==c?1:2))-g*(d[wm.ad].mc==c?2:1))+wm.windowOffset*(d[wm.ad].mc==c?0:1), 
-            ((monitorInfo.height-(bar.h+g))/d[wm.ad].mc)-g);
+            ((c-++ii)*(monitorInfo.height-(bar.h+wm.gapSize))/amc)+wm.gapSize+bar.h, 
+            ((monitorInfo.width/(amc==c?1:2))-(g+wm.borderSize*h)*(amc==c?2:1))+wm.windowOffset*h, 
+            ((monitorInfo.height-(bar.h+g))/amc)-g);
       }
     }
   }
@@ -225,14 +239,12 @@ void focusWindow(Window w){
   // unfocuse prev one
   if(ii!=-1){
     d[wm.ad].w[ii].isFocused = 0;
-    d[wm.ad].w[ii].borderColor = wm.nfcol;
-    XSetWindowBorder(wm.dpy, d[wm.ad].w[ii].win, d[wm.ad].w[ii].borderColor);
+    XSetWindowBorder(wm.dpy, d[wm.ad].w[ii].win, xColors[2]);
   }
 
   wm.focused = w;
   d[wm.ad].w[i].isFocused = 1;
-  d[wm.ad].w[i].borderColor = wm.fcol;
-  XSetWindowBorder(wm.dpy, w, d[wm.ad].w[i].borderColor);
+  XSetWindowBorder(wm.dpy, w, xColors[1]);
   XSetInputFocus(wm.dpy, w, RevertToPointerRoot, CurrentTime);
 }
 
@@ -253,16 +265,78 @@ void changeMode(arg args){
   }
 }
 
+void loadColors(){
+  Visual *visual = DefaultVisual(wm.dpy, DefaultScreen(wm.dpy));
+  Colormap map   = DefaultColormap(wm.dpy, DefaultScreen(wm.dpy));
+  XColor color;
+  XftColor xcolor;
+
+  // loading default colors
+  xColors = (unsigned long *)calloc(1, sizeof(*xColors));
+  for(int i = 0; i < SIZEOF(colors); i++){
+    xColors = (unsigned long *)realloc(xColors, sizeof(*xColors) * (i+1));
+
+    XAllocNamedColor(wm.dpy, map, colors[i], &color, &color);
+    xColors[i] = color.pixel;
+  }
+
+  // loading font colors
+  xFontColors = (XftColor *)calloc(1, sizeof(*xFontColors));
+  for(int i = 0; i < SIZEOF(fontColors); i++){
+    xFontColors = (XftColor *)realloc(xFontColors, sizeof(*xFontColors) * (i+1));
+
+    XftColorAllocName(wm.dpy, visual, map, fontColors[i], &xcolor);
+    xFontColors[i] = xcolor;
+  }
+}
+
+void loadFonts(){
+  wm.fonts = (XftFont **)calloc(1, sizeof(*wm.fonts));
+  for(int i = 0; i < SIZEOF(fontNames); i++){
+    wm.fonts = (XftFont **)realloc(wm.fonts, sizeof(*wm.fonts) * (i+1));
+    wm.fonts[i] = XftFontOpenName(wm.dpy, DefaultScreen(wm.dpy), fontNames[i]);
+  }
+}
+
+// utf8 decoder: https://gist.github.com/tylerneylon/9773800
+int decode_code_point(char **s) {
+  int k = **s ? __builtin_clz(~(**s << 24)) : 0;  // Count # of leading 1 bits.
+  int mask = (1 << (8 - k)) - 1;                  // All 1's with k leading 0's.
+  int value = **s & mask;
+  for (++(*s), --k; k > 0 && **s; --k, ++(*s)) {  // Note that k = #total bytes, or 0.
+    value <<= 6;
+    value += (**s & 0x3F);
+  }
+  return value;
+}
+
+void drawText(char *string, XftColor xcolor, Window win, int x, int y, int clear){
+  Visual *visual = DefaultVisual(wm.dpy, DefaultScreen(wm.dpy));
+  Colormap map   = DefaultColormap(wm.dpy, DefaultScreen(wm.dpy));
+  XftDraw *draw  = XftDrawCreate(wm.dpy, win, visual, map);
+
+  if(clear)
+    XClearWindow(wm.dpy, win);
+ 
+  for(int i = 0; i < SIZEOF(fontNames); i++){
+    char *s = string;
+    if(XftCharExists(wm.dpy, wm.fonts[i], (FcChar32)decode_code_point(&s))){
+      XftDrawStringUtf8(draw, &xcolor, wm.fonts[i], x, y, (const FcChar8 *)string, strlen(string));
+      break;
+    }
+  }
+  XftDrawDestroy(draw);
+}
+
 void updateButtons(){
   for(int i = 0; i < SIZEOF(button); i++){
     if(i == wm.ad){
-      XSetForeground(wm.dpy, button[i].gc, button[i].activeCol);
+      drawText((char *)buttonNames[i], xFontColors[1], button[i].win, 6, 14, 1);
     }else if(d[i].wc){
-      XSetForeground(wm.dpy, button[i].gc, button[i].notEmptyCol);
+      drawText((char *)buttonNames[i], xFontColors[2], button[i].win, 6, 14, 1);
     }else{
-      XSetForeground(wm.dpy, button[i].gc, button[i].fontCol);
+      drawText((char *)buttonNames[i], xFontColors[0], button[i].win, 6, 14, 1);
     }
-    XDrawString(wm.dpy, button[i].win, button[i].gc, 6, button[i].y+13, buttonNames[i], 1);
   }
 }
 
@@ -287,8 +361,6 @@ void addToWins(Window w){
 }
 
 void removeFromArray(int pos, int ind){
-  if(d[ind].mc > d[ind].wc-1)
-    d[ind].mc--;
   for(int i = pos; i < d[ind].wc; i++){
     d[ind].w[i] = d[ind].w[i+1];
   }
@@ -306,17 +378,9 @@ void remFromWins(Window w){
 }
 
 void drawBar(){
-  XColor color;
-  Colormap map = DefaultColormap(wm.dpy, DefaultScreen(wm.dpy));
-
-  XAllocNamedColor(wm.dpy, map, bar.color, &color, &color);
-  bar.col = color.pixel;
-  XAllocNamedColor(wm.dpy, map, bar.borderColor, &color, &color);
-  bar.borderCol = color.pixel;
-
   bar.win = XCreateSimpleWindow(wm.dpy, DefaultRootWindow(wm.dpy),
       bar.x, bar.y, bar.w-(bar.borderSize*2), bar.h, bar.borderSize,
-      bar.borderCol, bar.col
+      xColors[1], xColors[0]
       );
 
   XMapWindow(wm.dpy, bar.win);
@@ -327,50 +391,27 @@ void drawBar(){
   XChangeProperty(wm.dpy, bar.win, XInternAtom(wm.dpy, "_NET_SUPPORTING_WM_CHECK", False), XA_WINDOW, 32, PropModeReplace, (unsigned char *)&bar.win, 1);
   XChangeProperty(wm.dpy, bar.win, XInternAtom(wm.dpy, "_NET_WM_NAME", False), XInternAtom(wm.dpy, "UTF8_STRING", False), 8, PropModeReplace, (unsigned char *)"sewm", 4);
   XChangeProperty(wm.dpy, DefaultRootWindow(wm.dpy), XInternAtom(wm.dpy, "_NET_SUPPORTING_WM_CHECK", False), XA_WINDOW, 32, PropModeReplace, (unsigned char *)&bar.win, 1);
-
-  bar.gc = XCreateGC(wm.dpy, bar.win, 0, 0);
-  XAllocNamedColor(wm.dpy, map, "#FFFFFF", &color, &color);
-  XSetForeground(wm.dpy, bar.gc, color.pixel);
-  XSetBackground(wm.dpy, bar.gc, bar.col);
 }
 
 void createButtons(int w, int h){
-  XColor color;
-  Colormap map = DefaultColormap(wm.dpy, DefaultScreen(wm.dpy));
-
   for(int i = 0; i < SIZEOF(button); i++){
-    button[i].color = "#1a2026";
-    button[i].activeColor = "#0077cc";
-    button[i].notEmptyColor = "#888888";
-    button[i].fontColor = "#FFFFFF";
-
-    XAllocNamedColor(wm.dpy, map, button[i].color, &color, &color);
-    button[i].col = color.pixel;
-    XAllocNamedColor(wm.dpy, map, button[i].activeColor, &color, &color);
-    button[i].activeCol = color.pixel;
-    XAllocNamedColor(wm.dpy, map, button[i].notEmptyColor, &color, &color);
-    button[i].notEmptyCol = color.pixel;
-    XAllocNamedColor(wm.dpy, map, button[i].fontColor, &color, &color);
-    button[i].fontCol = color.pixel;
-
     button[i].x = i*w;
     button[i].y = 0;
     button[i].w = w;
     button[i].h = h;
+    button[i].args = (arg){.num = i};
+    button[i].func = changeDesktop;
 
     button[i].win = XCreateSimpleWindow(wm.dpy, bar.win,
         button[i].x, button[i].y, button[i].w, button[i].h, 0,
-        button[i].col, button[i].col
+        xColors[0], xColors[0]
         );
 
     XMapWindow(wm.dpy, button[i].win);
     XRaiseWindow(wm.dpy, button[i].win);
-    XSelectInput(wm.dpy, button[i].win, ExposureMask|ButtonPressMask);
-
-    button[i].gc = XCreateGC(wm.dpy, button[i].win, 0, 0);
-    XSetForeground(wm.dpy, button[i].gc, button[i].fontCol);
-    XSetBackground(wm.dpy, button[i].gc, button[i].col);
+    XSelectInput(wm.dpy, button[i].win, ButtonPressMask|ExposureMask);
   }
+  updateButtons();
 }
 
 void fetchMonitorInfo(){
@@ -409,22 +450,17 @@ int launchWM(){
     d[i].mc = wm.mc;
   d[wm.ad].w = (Windows *)calloc(0, sizeof(*d[wm.ad].w));
 
+  loadColors();
+  loadFonts();
+
   bar.x = 0;
   bar.y = 0;
   bar.w = monitorInfo.width;
   bar.h = 18;
   bar.borderSize = 0;
-  bar.color = "#1a2026";
-  bar.borderColor = "#0077cc";
 
   drawBar();
-  createButtons(18, bar.h);
-
-  map = DefaultColormap(wm.dpy, DefaultScreen(wm.dpy));
-  XAllocNamedColor(wm.dpy, map, wm.focusedColor, &color, &color);
-  wm.fcol = color.pixel;
-  XAllocNamedColor(wm.dpy, map, wm.notFocusedColor, &color, &color);
-  wm.nfcol = color.pixel;
+  createButtons(26, bar.h);
 
   wm.borderSize = (wm.border ? wm.borderSize : 0);
   wm.bevent.subwindow = None;

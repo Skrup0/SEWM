@@ -3,7 +3,6 @@
 // so that you don't have to edit the source everytime
 // you want to edit something.
 
-#include <X11/Xlib.h>
 typedef struct{
   unsigned int mod;
   KeySym key;
@@ -212,6 +211,7 @@ void makeFullscreen(){
     XMoveResizeWindow(wm.dpy, wm.focused, -wm.borderSize, -wm.borderSize, monitorInfo.width+wm.borderSize, monitorInfo.height+wm.borderSize);
 
     d[wm.ad].w[i].isFocused = 1;
+    d[wm.ad].w[i].isFloating = 1;
   }
 }
 

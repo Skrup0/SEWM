@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -L/usr/X11/lib -lX11
+CFLAGS = -L/usr/X11/lib -lX11 -I/usr/include/freetype2 -lXft 
 DIR = /usr/local/bin
 
 install:
