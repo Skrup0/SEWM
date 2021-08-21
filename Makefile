@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -L/usr/X11/lib -lX11 -I/usr/include/freetype2 -lXft 
+CFLAGS = -Wno-deprecated-declarations -L/usr/X11/lib -lX11 -I/usr/include/freetype2 -lXft
 DIR = /usr/local/bin
 
 install:
@@ -8,3 +8,5 @@ install:
 
 uninstall:
 	rm -rf $(DIR)/sewm sewm
+
+reinstall: uninstall install

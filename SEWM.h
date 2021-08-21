@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdint.h>
+#include <locale.h>
 
 #include <X11/X.h>
 #include <X11/Xlib.h>
@@ -11,6 +12,7 @@
 #include <X11/Xatom.h>
 #include <X11/keysym.h>
 #include <X11/keysymdef.h>
+#include <X11/cursorfont.h>
 
 // this is the core of the WM
 
@@ -54,11 +56,19 @@ struct{
   int wc, fc, tc, mc;
 } d[9];
 
+typedef struct{
+  char *content;
+  int shapeIndex;
+  XftColor fg;
+  XColor bg;
+} BarWidgets;
+BarWidgets barWidgets[1];
+
 struct{
   Window win;
   GC gc;
 
-  int x, y, w, h, borderSize;
+  int x, y, w, h, borderSize, widgetSpacing;
 } bar;
 
 struct{
@@ -73,9 +83,19 @@ XWindowAttributes attrs;
 
 const char *buttonNames[] = {"", "", "", "", "", "", "", "", ""};
 const char *fontNames[] = {"monospace:size=14", "fontawesome:size=14"};
+const char *languages[] = {"us", "ar"};
+int lang = 0;
 
-const char *colors[]     = {"#1a2026", "#0077cc", "#888888"};
-const char *fontColors[] = {"#FFFFFF", "#0077cc", "#888888"};
+const char *colors[] = {
+  "#1a2026", // bar color
+  "#0077cc", // border color
+  "#888888"  // inactive border color
+};
+const char *fontColors[] = {
+  "#FFFFFF", // default font color
+  "#0077cc", // current desktop font color
+  "#888888"  // non-empty desktop font color
+};
 unsigned long *xColors;
 XftColor *xFontColors;
 
@@ -87,7 +107,7 @@ void tileWindows();
 void focusWindow(Window w);
 void changeMode(arg args);
 void manageWindow(Window w);
-void addToWins(Window w);
+void addToWins(Window w, int i);
 void remFromWins(Window w);
 void removeFromArray(int pos, int ind);
 void drawBar();
@@ -98,6 +118,7 @@ int decode_code_point(char **s);
 void loadColors();
 void loadFonts();
 void drawText(char *string, XftColor xcolor, Window win, int x, int y, int clear);
+void renderBarWidgets();
 
 int getWindowIndex(Window w);
 int howManyFloating();
@@ -109,6 +130,7 @@ void handleEvents(){
   switch(wm.event.type){
     case Expose:
       XClearWindow(wm.dpy, bar.win);
+      renderBarWidgets();
       updateButtons();
       break;
     case KeyPress:
@@ -158,7 +180,7 @@ void handleEvents(){
 
       XGetWindowAttributes(wm.dpy, wm.event.xmap.window, &attrs);
       if(attrs.class != InputOnly && attrs.map_state == 2 && attrs.override_redirect == false){
-        addToWins(wm.event.xmap.window);
+        addToWins(wm.event.xmap.window, wm.ad);
         manageWindow(wm.event.xmap.window);
         tileWindows();
         if(d[wm.ad].wc)
@@ -317,7 +339,7 @@ void drawText(char *string, XftColor xcolor, Window win, int x, int y, int clear
 
   if(clear)
     XClearWindow(wm.dpy, win);
- 
+
   for(int i = 0; i < SIZEOF(fontNames); i++){
     char *s = string;
     if(XftCharExists(wm.dpy, wm.fonts[i], (FcChar32)decode_code_point(&s))){
@@ -348,15 +370,15 @@ int getWindowIndex(Window w){
   return -1;
 }
 
-void addToWins(Window w){
-  d[wm.ad].w = (Windows *)realloc(d[wm.ad].w, sizeof(*d[wm.ad].w) * (d[wm.ad].wc+1));
+void addToWins(Window w, int i){
+  d[i].w = (Windows *)realloc(d[i].w, sizeof(*d[i].w) * (d[i].wc+1));
 
-  d[wm.ad].w[d[wm.ad].wc].win = w;
-  d[wm.ad].w[d[wm.ad].wc].hasBorder = 1;
-  d[wm.ad].w[d[wm.ad].wc].isFloating = 0;
-  d[wm.ad].w[d[wm.ad].wc].isFullScreen = 0;
+  d[i].w[d[i].wc].win = w;
+  d[i].w[d[i].wc].hasBorder = 1;
+  d[i].w[d[i].wc].isFloating = 0;
+  d[i].w[d[i].wc].isFullScreen = 0;
 
-  d[wm.ad].wc++;
+  d[i].wc++;
   focusWindow(w);
 }
 
@@ -393,6 +415,12 @@ void drawBar(){
   XChangeProperty(wm.dpy, DefaultRootWindow(wm.dpy), XInternAtom(wm.dpy, "_NET_SUPPORTING_WM_CHECK", False), XA_WINDOW, 32, PropModeReplace, (unsigned char *)&bar.win, 1);
 }
 
+void renderBarWidgets(){
+  for(int i = 0; i < SIZEOF(barWidgets); i++){
+    drawText(barWidgets[i].content, barWidgets[i].fg, bar.win, (strlen(barWidgets[i].content)*14)*(i*bar.widgetSpacing), 14, 0);
+  }
+}
+
 void createButtons(int w, int h){
   for(int i = 0; i < SIZEOF(button); i++){
     button[i].x = i*w;
@@ -421,6 +449,7 @@ void fetchMonitorInfo(){
 }
 
 int launchWM(){
+  XSetWindowAttributes mainAttrs;
   Colormap map;
   XColor color;
 
@@ -458,9 +487,15 @@ int launchWM(){
   bar.w = monitorInfo.width;
   bar.h = 18;
   bar.borderSize = 0;
+  barWidgets[0] = (BarWidgets){"hello", 0, xFontColors[0], xColors[0]};
 
   drawBar();
   createButtons(26, bar.h);
+
+  mainAttrs.cursor = XCreateFontCursor(wm.dpy, XC_left_ptr);
+  XChangeWindowAttributes(wm.dpy, DefaultRootWindow(wm.dpy), CWCursor, &mainAttrs);
+
+  setlocale(LC_CTYPE, "");
 
   wm.borderSize = (wm.border ? wm.borderSize : 0);
   wm.bevent.subwindow = None;

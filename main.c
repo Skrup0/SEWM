@@ -13,7 +13,7 @@
 int main(int argc, char *argv[]){
   // some settings
   wm.borderSize = 2;
-  wm.gapSize = 16;
+  wm.gapSize = 0;
   wm.tiling = true;
   wm.border = true;
 

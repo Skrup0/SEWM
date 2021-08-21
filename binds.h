@@ -3,6 +3,7 @@
 // so that you don't have to edit the source everytime
 // you want to edit something.
 
+#include <X11/Xlib.h>
 typedef struct{
   unsigned int mod;
   KeySym key;
@@ -12,6 +13,10 @@ typedef struct{
 
 #define AltKey   Mod1Mask
 #define ShiftKey ShiftMask
+#define SuperKey Mod4Mask
+#define desktopTags(m,k,i) \
+{m,                  k,         changeDesktop,         {.num = i}           }, \
+{m|ShiftKey,         k,         moveToOtherDesktop,    {.num = i}           },
 
 void quitWM();
 void closeProgram();
@@ -22,7 +27,10 @@ void changeFocus(arg args);
 void changeGapSize(arg args);
 void changeWindowOffset(arg args);
 void switchMaster();
+void raiseFocusedWindow();
+void changeLang();
 void changeMasterCount(arg args);
+void moveToOtherDesktop(arg args);
 
 void changeWindowMap(arg args);
 void changeDesktop(arg args);
@@ -46,18 +54,19 @@ bind binds[] = {
   {AltKey,             XK_equal,  changeGapSize,         {.num = 1}           },
   {AltKey,             XK_d,      changeMasterCount,     {.num = 0}           }, // change the master window count
   {AltKey,             XK_i,      changeMasterCount,     {.num = 1}           },
-
-  {AltKey,             XK_1,      changeDesktop,         {.num = 0}           },
-  {AltKey,             XK_2,      changeDesktop,         {.num = 1}           },
-  {AltKey,             XK_3,      changeDesktop,         {.num = 2}           },
-  {AltKey,             XK_4,      changeDesktop,         {.num = 3}           },
-  {AltKey,             XK_5,      changeDesktop,         {.num = 4}           },
-  {AltKey,             XK_6,      changeDesktop,         {.num = 5}           },
-  {AltKey,             XK_7,      changeDesktop,         {.num = 6}           },
-  {AltKey,             XK_8,      changeDesktop,         {.num = 7}           },
-  {AltKey,             XK_9,      changeDesktop,         {.num = 8}           },
-
+  {AltKey,             XK_f,      raiseFocusedWindow,                         },
   {AltKey|ShiftKey,    XK_q,      quitWM                                      },
+  {SuperKey,           XK_space,  changeLang,                                 },
+
+  desktopTags(AltKey, XK_1, 0)
+    desktopTags(AltKey, XK_2, 1)
+    desktopTags(AltKey, XK_3, 2)
+    desktopTags(AltKey, XK_4, 3)
+    desktopTags(AltKey, XK_5, 4)
+    desktopTags(AltKey, XK_6, 5)
+    desktopTags(AltKey, XK_7, 6)
+    desktopTags(AltKey, XK_8, 7)
+    desktopTags(AltKey, XK_9, 8)
 };
 
 void execApp(arg args){
@@ -116,6 +125,21 @@ void changeWindowOffset(arg args){
   }
 }
 
+void changeLang(){
+	lang = ++lang % SIZEOF(languages);
+
+  char buf[28];
+  sprintf(buf ,"setxkbmap %s", languages[lang]);
+
+  system(buf);
+}
+
+void raiseFocusedWindow(){
+  int i = getWindowIndex(wm.focused);
+  if(i!=-1)
+    XRaiseWindow(wm.dpy, d[wm.ad].w[i].win);
+}
+
 void changeWindowMap(arg args){
   XWindowAttributes winAttrs;
 
@@ -135,6 +159,19 @@ void changeWindowMap(arg args){
   XUngrabServer(wm.dpy);
 }
 
+void moveToOtherDesktop(arg args){
+  int i = getWindowIndex(wm.focused);
+  if(i==-1 || args.num == wm.ad)
+    return;
+
+  addToWins(wm.focused, args.num);
+  removeFromArray(i, wm.ad);
+  changeWindowMap((arg){.win = wm.focused, .num = 1});
+  focusWindow(d[wm.ad].w[d[wm.ad].wc-1].win);
+  updateButtons();
+  tileWindows();
+}
+
 void changeDesktop(arg args){
   if(args.num == wm.ad)
     return;
@@ -151,6 +188,7 @@ void changeDesktop(arg args){
   }
 
   updateButtons();
+  tileWindows();
   // focus the window in master
   if(d[args.num].wc)
     focusWindow(d[args.num].w[d[args.num].wc-1].win);
