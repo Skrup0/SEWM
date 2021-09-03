@@ -8,6 +8,7 @@ void die(const char *msg){
 	exit(1);
 }
 
+// utf8 decoder: https://gist.github.com/tylerneylon/9773800
 int decode_code_point(char **s) {
 	int k = **s ? __builtin_clz(~(**s << 24)) : 0;  // Count # of leading 1 bits.
 	int mask = (1 << (8 - k)) - 1;                  // All 1's with k leading 0's.
