@@ -7,6 +7,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <dirent.h>
 
 #include <X11/X.h>
 #include <X11/Xlib.h>
@@ -17,6 +18,7 @@
 #include <X11/keysymdef.h>
 #include <X11/cursorfont.h>
 
+#include "barWidgets.h"
 #include "SEWM.h"
 #include "binds.h"
 #include "util.h"
@@ -54,17 +56,6 @@ void handleEvents(){
 		default:
 			printf("Unknown/Ignored event called, (%d)\n", wm.event.type);
 			break;
-	}
-}
-
-static void *updateBarWidgets(){
-	XEvent exppp;
-	while(wm.on){
-		sleep(1);
-    memset(&exppp, 0, sizeof(exppp));
-    exppp.type = Expose;
-    XSendEvent(wm.dpy, DefaultRootWindow(wm.dpy), False, ExposureMask, &exppp);
-    XFlush(wm.dpy);
 	}
 }
 
@@ -281,35 +272,6 @@ void drawBar(){
 	XChangeProperty(wm.dpy, bar.win, XInternAtom(wm.dpy, "_NET_SUPPORTING_WM_CHECK", False), XA_WINDOW, 32, PropModeReplace, (unsigned char *)&bar.win, 1);
 	XChangeProperty(wm.dpy, bar.win, XInternAtom(wm.dpy, "_NET_WM_NAME", False), XInternAtom(wm.dpy, "UTF8_STRING", False), 8, PropModeReplace, (unsigned char *)"sewm", 4);
 	XChangeProperty(wm.dpy, DefaultRootWindow(wm.dpy), XInternAtom(wm.dpy, "_NET_SUPPORTING_WM_CHECK", False), XA_WINDOW, 32, PropModeReplace, (unsigned char *)&bar.win, 1);
-}
-
-void renderBarWidgets(){
-	int j = 0, k = 0;
-	char *tmp = NULL;
-	for(int i = 0; i < SIZEOF(rightBarWidgets); i++){
-		if(rightBarWidgets[i].func){
-			tmp = (char *)malloc(strlen(rightBarWidgets[i].func()) + strlen(rightBarWidgets[i].content) + 1);
-			strcpy(tmp, rightBarWidgets[i].content);
-			strcat(tmp, rightBarWidgets[i].func());
-		}else{
-			tmp = rightBarWidgets[i].content;
-		}
-
-		k = getActualSize(tmp);
-		j += k;
-		if(rightBarWidgets[i].bg != bar.bg){
-			if(rightBarWidgets[i].bgWin)
-				XDestroyWindow(wm.dpy, rightBarWidgets[i].bgWin);
-			rightBarWidgets[i].bgWin = XCreateSimpleWindow(wm.dpy, bar.win,
-					(bar.w-(j*10))-1, 0, (k*10), bar.h+1, 0,
-					xColors[1], xColors[rightBarWidgets[i].bg]
-					);
-			XMapWindow(wm.dpy, rightBarWidgets[i].bgWin);
-			drawText(tmp, xFontColors[rightBarWidgets[i].fg], rightBarWidgets[i].bgWin, 0, 14, 0);
-		}else{
-			drawText(tmp, xFontColors[rightBarWidgets[i].fg], bar.win, bar.w-(j*10), 14, 0);
-		}
-	}
 }
 
 void createButtons(int w, int h, int bg){

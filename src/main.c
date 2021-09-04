@@ -2,6 +2,7 @@
 #include "binds.c"
 #include "util.c"
 #include "calls.c"
+#include "barWidgets.c"
 
 int main(int argc, char *argv[]){
   wm.borderSize = 2;

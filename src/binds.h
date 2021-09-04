@@ -52,6 +52,7 @@ bind binds[] = {
 	{AltKey,             XK_d,      changeMasterCount,     {.num = 0}           }, // change the master window count
 	{AltKey,             XK_i,      changeMasterCount,     {.num = 1}           },
 	{AltKey,             XK_f,      raiseFocusedWindow,                         },
+	{SuperKey,					 XK_space,  changeLang                                   },
 	{AltKey|ShiftKey,    XK_q,      quitWM                                      },
 
 	{SuperKey,           XK_q,			execApp,               {"mpc play"}         },
