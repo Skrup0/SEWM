@@ -50,12 +50,9 @@ typedef struct{
 } BarWidgets;
 
 BarWidgets rightBarWidgets[] = {
-	{"SEWM v0.1", 0, 3},
-	{"\uE0BA", 3, 4},
-	{"", 0, 4, getTime},
-	{"\uE0BA", 4, 5},
-	{"", 0, 5, getMemUsage},
-	{"\uE0BA", 5, 0},
+	{" | SEWM v0.1", 0, 0},
+	{" | ", 0, 0, getTime},
+	{"", 0, 0, getMemUsage},
 };
 
 struct{
@@ -75,27 +72,19 @@ struct{
 } button[9];
 XWindowAttributes attrs;
 
-const char *buttonNames[] = {"", "", "", "", "", "", "", "", ""};
-const char *fontNames[] = {"monospace:size=14", 
-	"fontawesome:size=14", 
-	"Hack Nerd Font Mono:pixelsize=16:antialias=true:autohint=true"};
+const char *buttonNames[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9"};
+const char *fontNames[] = {"monospace:size=14"}; 
 const char *languages[] = {"us"};
 
 const char *colors[] = {
 	"#1a2026", // bar color
 	"#0077cc", // border color
 	"#888888", // inactive border color
-	"#0D47A1",
-	"#1565C0",
-	"#1976D2",
 };
 const char *fontColors[] = {
 	"#FFFFFF", // default font color
 	"#0077cc", // current desktop font color
 	"#888888", // non-empty desktop font color
-	"#0D47A1",
-	"#1565C0",
-	"#1976D2",
 };
 unsigned long *xColors;
 XftColor *xFontColors;
